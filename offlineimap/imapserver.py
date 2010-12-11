@@ -136,7 +136,6 @@ class IMAPServer:
         self.reference = reference
         self.gss_step = self.GSS_STATE_STEP
         self.gss_vc = None
-        self.gssapi = False
 
     def getpassword(self):
         if self.goodpassword != None:
@@ -180,11 +179,6 @@ class IMAPServer:
         retval = self.username + ' ' + hmac.new(passwd, challenge).hexdigest()
         ui.debug('imap', 'md5handler: returning %s' % retval)
         return retval
-
-    def plainauth(self, imapobj):
-        UIBase.getglobalui().debug('imap',
-                                   'Attempting plain authentication')
-        imapobj.login(self.username, self.repos.getpassword())
 
     def gssauth(self, response):
         data = base64.b64encode(response)
@@ -267,40 +261,49 @@ class IMAPServer:
 
                 imapobj.mustquote = imaplibutil.mustquote
 
-                if not self.tunnel:
-                    try:
-                        # Try GSSAPI and continue if it fails
-                        if 'AUTH=GSSAPI' in imapobj.capabilities and have_gss:
+                def auth_gssapi():
+                    if 'AUTH=GSSAPI' in imapobj.capabilities and have_gss:
+                        UIBase.getglobalui().debug('imap',
+                            'Attempting GSSAPI authentication')
+                        try:
+                            imapobj.authenticate('GSSAPI', self.gssauth)
+                            return True
+                        except imapobj.error, val:
                             UIBase.getglobalui().debug('imap',
-                                'Attempting GSSAPI authentication')
-                            try:
-                                imapobj.authenticate('GSSAPI', self.gssauth)
-                            except imapobj.error, val:
-                                self.gssapi = False
-                                UIBase.getglobalui().debug('imap',
-                                    'GSSAPI Authentication failed')
-                            else:
-                                self.gssapi = True
-                                #if we do self.password = None then the next attempt cannot try...
-                                #self.password = None
+                                'GSSAPI Authentication failed')
+                    return False
 
-                        if not self.gssapi:
-                            if 'AUTH=CRAM-MD5' in imapobj.capabilities:
-                                UIBase.getglobalui().debug('imap',
-                                                       'Attempting CRAM-MD5 authentication')
-                                try:
-                                    imapobj.authenticate('CRAM-MD5', self.md5handler)
-                                except imapobj.error, val:
-                                    self.plainauth(imapobj)
-                            else:
-                                self.plainauth(imapobj)
-                        # Would bail by here if there was a failure.
-                        success = 1
-                        self.goodpassword = self.password
+                def auth_cram_md5():
+                    if 'AUTH=CRAM-MD5' in imapobj.capabilities:
+                        UIBase.getglobalui().debug('imap',
+                            'Attempting CRAM-MD5 authentication')
+                        try:
+                            imapobj.authenticate('CRAM-MD5', self.md5handler)
+                            return True
+                        except imapobj.error, val:
+                            UIBase.getglobalui().debug('imap',
+                                'CRAM-MD5 Authentication failed')
+                    return False
+
+                def auth_plain():
+                    UIBase.getglobalui().debug('imap',
+                            'Attempting plain authentication')
+                    try:
+                        imapobj.login(self.username, self.repos.getpassword())
+                        return True
                     except imapobj.error, val:
                         self.passworderror = str(val)
-                        raise
-                        #self.password = None
+                    return False
+
+
+                authmethods = [auth_gssapi, auth_cram_md5, auth_plain]
+                success = reduce(lambda ok, method: ok or method(), authmethods, self.tunnel)
+
+                if not success:
+                    raise imapobj.error, self.passworderror
+
+                if not self.tunnel:
+                    self.goodpassword = self.password
 
             if self.delim == None:
                 listres = imapobj.list(self.reference, '""')[1]
@@ -352,7 +355,6 @@ class IMAPServer:
         # reset kerberos state
         self.gss_step = self.GSS_STATE_STEP
         self.gss_vc = None
-        self.gssapi = False
         self.connectionlock.release()
 
     def keepalive(self, timeout, event):
