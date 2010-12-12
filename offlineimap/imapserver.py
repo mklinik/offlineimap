@@ -35,6 +35,14 @@ try:
 except ImportError:
     pass
 
+try:
+    # do we have ntlm including the IMAP patch?
+    have_ntlm_with_imap = False
+    from ntlm import IMAPNtlmAuthHandler
+    have_ntlm_with_imap = True
+except ImportError:
+    pass
+
 class UsefulIMAPMixIn:
     def getstate(self):
         return self.state
@@ -285,6 +293,21 @@ class IMAPServer:
                                 'CRAM-MD5 Authentication failed')
                     return False
 
+                def auth_ntlm():
+                    if 'AUTH=NTLM' in imapobj.capabilities and have_ntlm_with_imap:
+                        UIBase.getglobalui().debug('imap',
+                            'Attempting NTLM authentication')
+                        try:
+                            imapobj.authenticate('NTLM',
+                                IMAPNtlmAuthHandler(
+                                    'DOMAIN' + '\\' + self.username,
+                                    self.repos.getpassword()))
+                            return True
+                        except imapobj.error, val:
+                            UIBase.getglobalui().debug('imap',
+                                'NTLM Authentication failed')
+                    return False
+
                 def auth_plain():
                     UIBase.getglobalui().debug('imap',
                             'Attempting plain authentication')
@@ -296,7 +319,7 @@ class IMAPServer:
                     return False
 
 
-                authmethods = [auth_gssapi, auth_cram_md5, auth_plain]
+                authmethods = [auth_gssapi, auth_cram_md5, auth_ntlm, auth_plain]
                 success = reduce(lambda ok, method: ok or method(), authmethods, self.tunnel)
 
                 if not success:
