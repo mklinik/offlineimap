@@ -319,7 +319,7 @@ class IMAPServer:
                     return False
 
 
-                authmethods = [auth_gssapi, auth_cram_md5, auth_ntlm, auth_plain]
+                authmethods = [auth_gssapi, auth_cram_md5, auth_ntlm]
                 success = reduce(lambda ok, method: ok or method(), authmethods, self.tunnel)
 
                 if not success:
