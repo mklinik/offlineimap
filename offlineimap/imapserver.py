@@ -299,7 +299,7 @@ class IMAPServer:
                             'Attempting NTLM authentication')
                         try:
                             imapobj.authenticate('NTLM',
-                                IMAPNtlmAuthHandler(
+                                IMAPNtlmAuthHandler.IMAPNtlmAuthHandler(
                                     'DOMAIN' + '\\' + self.username,
                                     self.repos.getpassword()))
                             return True
