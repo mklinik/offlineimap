@@ -183,7 +183,7 @@ class IMAPServer:
         challenge = response.strip()
         ui.debug('imap', 'md5handler: got challenge %s' % challenge)
 
-        passwd = self.repos.getpassword()
+        passwd = self.getpassword()
         retval = self.username + ' ' + hmac.new(passwd, challenge).hexdigest()
         ui.debug('imap', 'md5handler: returning %s' % retval)
         return retval
@@ -301,7 +301,7 @@ class IMAPServer:
                             imapobj.authenticate('NTLM',
                                 IMAPNtlmAuthHandler.IMAPNtlmAuthHandler(
                                     'DOMAIN' + '\\' + self.username,
-                                    self.repos.getpassword()))
+                                    self.getpassword()))
                             return True
                         except imapobj.error, val:
                             UIBase.getglobalui().debug('imap',
@@ -312,7 +312,7 @@ class IMAPServer:
                     UIBase.getglobalui().debug('imap',
                             'Attempting plain authentication')
                     try:
-                        imapobj.login(self.username, self.repos.getpassword())
+                        imapobj.login(self.username, self.getpassword())
                         return True
                     except imapobj.error, val:
                         self.passworderror = str(val)
